@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+backend/uploads/
+.env
+
+# Node / Angular (see also frontend/.gitignore)
+node_modules/
+dist/
+.angular/
+
+.DS_Store

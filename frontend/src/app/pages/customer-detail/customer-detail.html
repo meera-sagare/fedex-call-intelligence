@@ -1,0 +1,202 @@
+<section class="banner">
+  <div class="container">
+    <a routerLink="/" class="back">← My customers</a>
+    <h1>{{ customer()?.full_name ?? 'Loading…' }}</h1>
+    @if (customer(); as c) {
+      <p class="banner-sub">{{ c.company_name }} · Account {{ c.account_number }}</p>
+    }
+  </div>
+</section>
+
+<div class="container">
+  @if (error()) {
+    <div class="error-banner" role="alert">{{ error() }}</div>
+  }
+
+  <div class="layout">
+    <!-- Left two-thirds: customer details and call analysis -->
+    <div class="main-col">
+      @if (customer(); as c) {
+        <section aria-labelledby="details-heading">
+          <div class="section-head">
+            <h2 id="details-heading">Customer details</h2>
+            <span class="pill" [class]="'pill ' + statusClass(c.status)">{{ c.status }}</span>
+          </div>
+          <dl class="details">
+            <div><dt>Full name</dt><dd>{{ c.full_name }}</dd></div>
+            <div><dt>Status</dt><dd>{{ c.status }}</dd></div>
+            <div><dt>Phone number</dt><dd><a [href]="'tel:' + c.phone_number">{{ c.phone_number }}</a></dd></div>
+            <div><dt>Alternate phone number</dt>
+              <dd>@if (c.alternate_phone_number) {<a [href]="'tel:' + c.alternate_phone_number">{{ c.alternate_phone_number }}</a>} @else {—}</dd></div>
+            <div class="wide"><dt>Email</dt><dd><a [href]="'mailto:' + c.email">{{ c.email }}</a></dd></div>
+            <div class="wide"><dt>Address</dt><dd>{{ c.address }}</dd></div>
+            <div class="wide"><dt>Shipping address</dt><dd>{{ c.shipping_address || '—' }}</dd></div>
+            <div class="wide"><dt>Home address</dt><dd>{{ c.home_address || '—' }}</dd></div>
+            <div class="wide"><dt>Office address</dt><dd>{{ c.office_address || '—' }}</dd></div>
+          </dl>
+
+          <h3 class="subtitle">Accounts receivable</h3>
+          <div class="ar">
+            <div><span class="label">AR balance</span><span class="num">{{ c.ar_balance | currency: 'USD' }}</span></div>
+            <div><span class="label">Overdue</span><span class="num" [class.danger]="+c.overdue_amount > 0">{{ c.overdue_amount | currency: 'USD' }}</span></div>
+            <div><span class="label">Days past due</span><span class="num">{{ c.days_past_due }}</span></div>
+            <div><span class="label">Risk level</span><span class="pill" [class]="'pill ' + statusClass(c.risk_level)">{{ c.risk_level }}</span></div>
+          </div>
+        </section>
+      }
+
+      <section #analysisPanel class="analysis" aria-live="polite" aria-labelledby="analysis-heading">
+        @if (analyzing()) {
+          <div class="analyzing card">
+            <span class="spinner" aria-hidden="true"></span>
+            Generating call summary, notes, commitments and sentiment…
+          </div>
+        } @else if (selected(); as call) {
+          <div class="section-head">
+            <div>
+              <h2 id="analysis-heading">Call log summary &amp; analysis</h2>
+              <p class="subtitle">{{ call.direction }} call · {{ call.call_datetime | date: 'medium' }} · {{ duration(call.duration_seconds) }}</p>
+            </div>
+            <button class="btn secondary" type="button" (click)="reanalyze()">Re-analyze</button>
+          </div>
+
+          @if (call.analysis_status === 'Failed') {
+            <div class="error-banner">{{ call.analysis_error }}</div>
+          } @else {
+            <div class="chips">
+              <span class="pill" [class]="'pill ' + statusClass(call.sentiment)">{{ call.sentiment }} sentiment</span>
+              <span class="pill" [class]="'pill ' + statusClass(call.call_outcome)">{{ call.call_outcome }}</span>
+              @if (call.dispute_raised) {
+                <span class="pill in-dispute">Dispute raised</span>
+              }
+            </div>
+
+            <div class="sentiment-meter" [attr.aria-label]="'Sentiment score ' + (call.sentiment_score | number: '1.2-2')">
+              <span class="track"><span class="marker" [style.left.%]="scorePosition(call.sentiment_score)"></span></span>
+              <span class="scale muted"><span>Negative</span><span>Score {{ call.sentiment_score | number: '1.2-2' }}</span><span>Positive</span></span>
+            </div>
+
+            <h3 class="subtitle">Call log summary</h3>
+            <p class="summary">{{ call.call_log_summary }}</p>
+
+            <div class="section-head">
+              <h3 class="subtitle">Interaction notes</h3>
+              <button class="btn secondary small" type="button" (click)="copyNotes()">{{ copied() ? 'Copied' : 'Copy notes' }}</button>
+            </div>
+            <pre class="notes">{{ call.interaction_notes }}</pre>
+
+            <div class="grid-3">
+              <div>
+                <h3 class="subtitle">Payment commitments</h3>
+                @for (p of call.payment_commitments; track $index) {
+                  <div class="mini card">
+                    <strong>{{ p.amount !== null ? (p.amount | currency: 'USD') : 'Amount TBC' }}</strong>
+                    <span>Due {{ p.due_date ? (p.due_date | date: 'mediumDate') : 'TBC' }}</span>
+                    @if (p.method) { <span class="muted">via {{ p.method }}</span> }
+                    @if (p.invoices.length) { <span class="muted small">{{ p.invoices.join(', ') }}</span> }
+                    <span class="pill" [class]="'pill ' + statusClass(p.confidence === 'High' ? 'low' : p.confidence === 'Low' ? 'high' : 'medium')">{{ p.confidence }} confidence</span>
+                  </div>
+                } @empty {
+                  <p class="muted">No commitments captured.</p>
+                }
+              </div>
+              <div>
+                <h3 class="subtitle">Risks</h3>
+                @for (r of call.risks; track $index) {
+                  <div class="mini card">
+                    <span class="row"><strong>{{ r.category }}</strong><span class="pill" [class]="'pill ' + statusClass(r.severity)">{{ r.severity }}</span></span>
+                    <span class="muted">{{ r.description }}</span>
+                  </div>
+                } @empty {
+                  <p class="muted">No risks identified.</p>
+                }
+              </div>
+              <div>
+                <h3 class="subtitle">Follow-up actions</h3>
+                @for (a of call.follow_up_actions; track $index) {
+                  <div class="mini card">
+                    <strong>{{ a.action }}</strong>
+                    <span class="muted">{{ a.owner }}{{ a.due_date ? ' · due ' + (a.due_date | date: 'mediumDate') : '' }}</span>
+                  </div>
+                } @empty {
+                  <p class="muted">No follow-ups required.</p>
+                }
+              </div>
+            </div>
+
+            <p class="engine muted small">
+              Generated by {{ call.analysis_engine?.startsWith('claude') ? 'Claude AI' : 'rule-based analyzer' }}
+              · {{ call.analyzed_at | date: 'medium' }}
+            </p>
+          }
+
+          @if (call.transcript) {
+            <button class="link" type="button" (click)="showTranscript.set(!showTranscript())" [attr.aria-expanded]="showTranscript()">
+              {{ showTranscript() ? 'Hide' : 'Show' }} transcript
+            </button>
+            @if (showTranscript()) {
+              <pre class="transcript">{{ call.transcript }}</pre>
+            }
+          }
+        } @else if (customer()) {
+          <p class="muted hint">Select a call log to view its summary and analysis.</p>
+        }
+      </section>
+    </div>
+
+    <!-- Right third: call logs up to today -->
+    <aside class="side-col" aria-labelledby="calls-heading">
+      <div class="section-head">
+        <h2 id="calls-heading">Call logs</h2>
+        <button class="btn small" type="button" (click)="showUpload.set(!showUpload())" [attr.aria-expanded]="showUpload()">
+          {{ showUpload() ? 'Cancel' : '+ Log call' }}
+        </button>
+      </div>
+      <p class="subtitle">Up to {{ today | date: 'mediumDate' }}</p>
+
+      @if (showUpload()) {
+        <form class="upload card" (submit)="$event.preventDefault(); submitCall()">
+          <label for="audio">Call recording</label>
+          <input id="audio" type="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.webm,.flac" (change)="onAudioSelected($event)" />
+          <label for="transcript">Transcript <span class="muted">(optional if a recording is attached)</span></label>
+          <textarea id="transcript" rows="6" placeholder="Collector: …&#10;Customer: …"
+                    [value]="transcriptText()" (input)="transcriptText.set($any($event.target).value)"></textarea>
+          <label for="direction">Direction</label>
+          <select id="direction" [value]="direction()" (change)="direction.set($any($event.target).value)">
+            <option value="Outbound">Outbound</option>
+            <option value="Inbound">Inbound</option>
+          </select>
+          @if (uploadError()) {
+            <p class="error-text" role="alert">{{ uploadError() }}</p>
+          }
+          <button class="btn" type="submit" [disabled]="uploading()">{{ uploading() ? 'Analyzing…' : 'Transcribe & analyze' }}</button>
+        </form>
+      }
+
+      <ul class="calls">
+        @for (call of calls(); track call.id) {
+          <li>
+            <button type="button" class="call" [class.selected]="call.id === selectedId()" (click)="openCall(call)">
+              <span class="row">
+                <strong>{{ call.call_datetime | date: 'mediumDate' }}</strong>
+                <span class="muted small">{{ call.call_datetime | date: 'shortTime' }}</span>
+              </span>
+              <span class="muted small">{{ call.direction }} · {{ duration(call.duration_seconds) }}{{ call.audio_filename ? ' · recording' : '' }}</span>
+              <span class="row">
+                @if (call.analysis_status === 'Completed') {
+                  <span class="outcome">{{ call.call_outcome }}</span>
+                  <span class="pill" [class]="'pill ' + statusClass(call.sentiment)">{{ call.sentiment }}</span>
+                } @else {
+                  <span class="muted small">Not yet analyzed</span>
+                  <span class="pill" [class]="'pill ' + statusClass(call.analysis_status)">{{ call.analysis_status }}</span>
+                }
+              </span>
+            </button>
+          </li>
+        } @empty {
+          <li class="muted">No calls logged yet.</li>
+        }
+      </ul>
+    </aside>
+  </div>
+</div>

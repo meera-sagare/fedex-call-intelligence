@@ -1,0 +1,166 @@
+<section class="hero">
+  <div class="container hero-inner">
+    <div>
+      <h1>Welcome{{ firstName() ? ', ' + firstName() : '' }}</h1>
+      <p class="subtitle">Your customer opportunities and follow-ups</p>
+      <p class="muted intro">
+        Select a customer to review account details, call logs and AI-generated call summaries, commitments and risks.
+      </p>
+    </div>
+    <div class="collector-select">
+      <label for="collector">Signed in as collector</label>
+      <select id="collector" [value]="ctx.collectorId() ?? ''" (change)="onCollectorChange($any($event.target).value)">
+        @for (c of collectors(); track c.id) {
+          <option [value]="c.id" [selected]="c.id === ctx.collectorId()">{{ c.full_name }} · {{ c.region }}</option>
+        }
+      </select>
+    </div>
+  </div>
+</section>
+
+<div class="container">
+  @if (error()) {
+    <div class="error-banner" role="alert">{{ error() }}</div>
+  }
+
+  @if (insights(); as kpi) {
+    <section aria-labelledby="portfolio-heading" class="section">
+      <h2 id="portfolio-heading">Portfolio insights</h2>
+      <div class="kpis">
+        <div class="kpi card">
+          <span class="kpi-label">Total AR balance</span>
+          <span class="kpi-value">{{ kpi.total_ar_balance | currency: 'USD' : 'symbol' : '1.0-0' }}</span>
+          <span class="muted small">{{ kpi.customer_count }} customers</span>
+        </div>
+        <div class="kpi card">
+          <span class="kpi-label">Overdue</span>
+          <span class="kpi-value danger">{{ kpi.total_overdue | currency: 'USD' : 'symbol' : '1.0-0' }}</span>
+          <span class="muted small">{{ kpi.high_risk_customers }} high-risk · {{ kpi.customers_in_dispute }} in dispute</span>
+        </div>
+        <div class="kpi card">
+          <span class="kpi-label">Open payment commitments</span>
+          <span class="kpi-value">{{ kpi.open_commitment_amount | currency: 'USD' : 'symbol' : '1.0-0' }}</span>
+          <span class="muted small">{{ kpi.open_commitment_count }} promises to pay</span>
+        </div>
+        <div class="kpi card">
+          <span class="kpi-label">Calls analyzed</span>
+          <span class="kpi-value">{{ kpi.calls_analyzed }}</span>
+          <span class="muted small">{{ kpi.calls_pending_analysis }} awaiting analysis</span>
+        </div>
+      </div>
+
+      @if (sentimentTotal()) {
+        <div class="sentiment card">
+          <span class="kpi-label">Customer sentiment across analyzed calls</span>
+          <div class="bar" role="img" [attr.aria-label]="'Sentiment breakdown'">
+            @for (s of ['Positive', 'Neutral', 'Negative']; track s) {
+              @if (kpi.sentiment_breakdown[s]) {
+                <span class="seg" [class]="'seg ' + s.toLowerCase()" [style.flex]="kpi.sentiment_breakdown[s]"></span>
+              }
+            }
+          </div>
+          <div class="legend">
+            @for (s of ['Positive', 'Neutral', 'Negative']; track s) {
+              <span><i [class]="s.toLowerCase()"></i>{{ s }} {{ sentimentPct(kpi.sentiment_breakdown[s] || 0) }}%</span>
+            }
+          </div>
+        </div>
+      }
+    </section>
+  }
+
+  <section aria-labelledby="customers-heading" class="section">
+    <div class="list-head">
+      <div>
+        <h2 id="customers-heading">My customers</h2>
+        <p class="subtitle">Sorted by overdue amount</p>
+      </div>
+      <div class="filters">
+        <label class="sr-only" for="search">Search customers</label>
+        <input id="search" type="search" placeholder="Search name, company or account"
+               [value]="search()" (input)="search.set($any($event.target).value)" />
+        <label class="sr-only" for="status">Filter by status</label>
+        <select id="status" [value]="status()" (change)="status.set($any($event.target).value)">
+          <option value="">All statuses</option>
+          @for (s of statuses; track s) {
+            <option [value]="s">{{ s }}</option>
+          }
+        </select>
+      </div>
+    </div>
+
+    @if (loading()) {
+      <p class="muted">Loading customers…</p>
+    } @else if (!customers().length) {
+      <p class="muted">No customers match your filters.</p>
+    } @else {
+      <ul class="customer-grid">
+        @for (c of customers(); track c.id) {
+          <li>
+            <button class="customer card" type="button" (click)="open(c.id)">
+              <span class="row">
+                <span class="name">{{ c.full_name }}</span>
+                <span class="pill" [class]="'pill ' + statusClass(c.status)">{{ c.status }}</span>
+              </span>
+              <span class="company">{{ c.company_name }}</span>
+              <span class="muted small">{{ c.account_number }} · {{ c.phone_number }}</span>
+              <span class="figures">
+                <span><span class="muted small">AR balance</span>{{ c.ar_balance | currency: 'USD' : 'symbol' : '1.0-0' }}</span>
+                <span><span class="muted small">Overdue</span>
+                  <strong [class.danger]="+c.overdue_amount > 0">{{ c.overdue_amount | currency: 'USD' : 'symbol' : '1.0-0' }}</strong></span>
+                <span><span class="muted small">Days past due</span>{{ c.days_past_due }}</span>
+              </span>
+              <span class="row foot">
+                <span class="muted small">Last contact: {{ c.last_contact_date ? (c.last_contact_date | date: 'mediumDate') : '—' }}</span>
+                <span class="pill" [class]="'pill ' + statusClass(c.risk_level)">{{ c.risk_level }} risk</span>
+              </span>
+            </button>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+
+  @if (insights(); as kpi) {
+    <section class="section two-col">
+      <div>
+        <h2>Top risks</h2>
+        <p class="subtitle">Detected from recent calls</p>
+        @if (kpi.top_risks.length) {
+          <ul class="plain">
+            @for (r of kpi.top_risks; track $index) {
+              <li class="item">
+                <span class="row">
+                  <a href="" (click)="$event.preventDefault(); open(r.customer_id)">{{ r.customer_name }}</a>
+                  <span class="pill" [class]="'pill ' + statusClass(r.severity)">{{ r.severity }}</span>
+                </span>
+                <strong>{{ r.category }}</strong> — <span class="muted">{{ r.description }}</span>
+              </li>
+            }
+          </ul>
+        } @else {
+          <p class="muted">No risks detected yet.</p>
+        }
+      </div>
+      <div>
+        <h2>Upcoming commitments</h2>
+        <p class="subtitle">Promises to pay due from today</p>
+        @if (kpi.upcoming_commitments.length) {
+          <ul class="plain">
+            @for (p of kpi.upcoming_commitments; track $index) {
+              <li class="item">
+                <span class="row">
+                  <a href="" (click)="$event.preventDefault(); open(p.customer_id)">{{ p.customer_name }}</a>
+                  <strong>{{ p.amount !== null ? (p.amount | currency: 'USD') : 'Amount TBC' }}</strong>
+                </span>
+                <span class="muted">Due {{ p.due_date | date: 'mediumDate' }}{{ p.method ? ' · ' + p.method : '' }} · {{ p.confidence }} confidence</span>
+              </li>
+            }
+          </ul>
+        } @else {
+          <p class="muted">No open commitments. Open a recent call log to analyze it.</p>
+        }
+      </div>
+    </section>
+  }
+</div>

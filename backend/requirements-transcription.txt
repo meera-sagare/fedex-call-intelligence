@@ -1,0 +1,4 @@
+# Optional: local speech-to-text for uploaded call recordings.
+faster-whisper>=1.2
+# PyAV 17+ removed the `metadata_errors` argument that faster-whisper 1.2 passes to av.open().
+av>=11,<17
